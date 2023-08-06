@@ -19,16 +19,6 @@
   #define SAIL_BUTTON        3
   #define SAIL_VERT          A3
   #define SAIL_HORZ          A4
-  
-// RF Message definitions
-  #define RUDR_RIGHT_LOW  "RR1"
-  #define RUDR_RIGHT_HIGH "RR2"
-  #define RUDR_LEFT_LOW   "RL1"
-  #define RUDR_LEFT_HIGH  "RL2"
-  #define SAIL_DOWN_LOW   "SD1"
-  #define SAIL_DOWN_HIGH  "SD2"
-  #define SAIL_UP_LOW     "SU1"
-  #define SAIL_UP_HIGH    "SU2"
 
 // Threshold Values (Needs to be adjusted once the controller is assembled)
   #define OFF_LOWER_THRESHOLD     450
