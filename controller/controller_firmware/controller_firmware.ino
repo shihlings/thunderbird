@@ -1,6 +1,6 @@
 /*
  * Date Created:    August 5th, 2023
- * Last Modified:   August 6th, 2023
+ * Last Modified:   August 7th, 2023
  * Filename:        controller_firmware.ino
  * Purpose:         Process input data from two joystics and send them using an RF communication module to Thunderbird.
  * Microcontroller: Arduino Uno R3
@@ -20,22 +20,8 @@
   #define SAIL_VERT          A3
   #define SAIL_HORZ          A4
 
-// Threshold Values (Needs to be adjusted once the controller is assembled)
-  #define OFF_LOWER_THRESHOLD     450
-  #define OFF_HIGHER_THRESHOLD    550
-  #define BOTTOM_THRESHOLD        200
-  #define TOP_THRESHOLD           800
-
-// Status Values
-  #define OFF         -1
-  #define TOP_HIGH    4
-  #define TOP_LOW     3
-  #define BOTTOM_HIGH 2
-  #define BOTTOM_LOW  1
-
 // Function declarations
   void getJoystick(int8_t* rudr_stat, int8_t* sail_stat);
-  int8_t determineStatus(uint16_t value);
   void sendSeralRF(int8_t rudr_stat, int8_t sail_stat);
   void sendSerialDebug(uint16_t rudr_val, uint16_t sail_val);
 
@@ -62,62 +48,32 @@ void setup() {
 
 void loop() {
   // initialize joystic status variables
-  int8_t rudr_stat = OFF;
-  int8_t sail_stat = OFF;
+  uint16_t rudr_val = 0;
+  uint16_t sail_val = 0;
 
   //get joystick status
-  getJoystick(&rudr_stat, &sail_stat);
+  getJoystick(&rudr_val, &sail_val);
 
-  // Send message via RF
-  #ifndef DEBUG
-    if (!(rudr_stat == OFF && sail_stat == OFF)) {
-      sendSeralRF(rudr_stat, sail_stat);
-    }
+  #ifdef DEBUG
+    // if debugging mode is on, send raw values
+    sendSerialDebug(rudr_val, sail_val);
+  #else
+    // Send message via RF if debugging is off
+    sendSeralRF(rudr_val, sail_val);
   #endif
 }
 
 // get joystick status
-void getJoystick(int8_t* rudr_stat, int8_t* sail_stat) {
+void getJoystick(uint16_t* rudr_val, uint16_t* sail_val) {
   // initialize raw value variables and obtain raw values from analog ports
-  uint16_t rudr_val = analogRead(RUDR_VERT);
-  uint16_t sail_val = analogRead(SAIL_VERT);
-
-  // if debugging mode is on, send raw values
-  #ifdef DEBUG
-    sendSerialDebug(rudr_val, sail_val);
-  #endif
-
-  // determine status of each joystick
-  *rudr_stat = determineStatus(rudr_val);
-  *sail_stat = determineStatus(sail_val);
-}
-
-// determine joystick status according to the raw values obtained
-// see threshold value definitions for specific values
-int8_t determineStatus(uint16_t value) {
-  if(value < OFF_LOWER_THRESHOLD) {
-    if(value < BOTTOM_THRESHOLD) {
-      return BOTTOM_HIGH;
-    }
-    else {
-      return BOTTOM_LOW;
-    }
-  }
-  else if(value > OFF_HIGHER_THRESHOLD) {
-    if(value > TOP_THRESHOLD) {
-      return TOP_HIGH;
-    }
-    return TOP_LOW;
-  }
-  else {
-    return OFF;
-  }
+  *rudr_val = analogRead(RUDR_VERT);
+  *sail_val = analogRead(SAIL_VERT);
 }
 
 // send serial message to RF module to instruct what to send
-void sendSeralRF(int8_t rudr_stat, int8_t sail_stat) {
-  Serial.print(rudr_stat);
-  Serial.println(sail_stat);
+void sendSeralRF(uint16_t rudr_val, uint16_t sail_val) {
+  Serial.print(rudr_val);
+  Serial.println(sail_val);
 }
 
 // send serial debug message containing raw values from each analog port
