@@ -4,7 +4,7 @@
  * Filename:        motor_ramp_test.ino
  * Purpose:         Ramp up then down (both clockwise and counterclockwise) the DC Motor (FIT0521) using PWM.
  * Microcontroller: Arduino Uno R3
- * Connections:     See controller_schematics located in the schematics folder
+ * Connections:     See internal_schematics located in the schematics folder
  */
 
 // define constants and pins 
