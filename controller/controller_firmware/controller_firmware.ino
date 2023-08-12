@@ -13,11 +13,11 @@
 // Pin definitions
   #define RF_SERIAL_RATE     9600    //change this to the baud rate that the RF communication module is set at
   #define DEBUG_SERIAL_RATE  9600
-  #define RUDR               A4
-  #define SAIL               A3
+  #define RUDR               A3
+  #define SAIL               A4
 
 // RF definition
-  #define SENDING_INTERVAL   750
+  #define SENDING_INTERVAL   600
 
 // Setup
 void setup() {
