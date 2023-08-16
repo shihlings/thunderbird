@@ -1,6 +1,6 @@
 /*
  * Date Created:    August 11th, 2023
- * Last Modified:   August 14th, 2023
+ * Last Modified:   August 15th, 2023
  * Filename:        internals_firmware.ino
  * Purpose:         Receive controller commands and turn the sail and rudder accordingly.
  * Microcontroller: Arduino Uno R3
@@ -113,23 +113,33 @@ void sendRF() {
   #endif
 }
 
-// Adjust Sail motor speed and direction
+ // Adjust Sail motor speed and direction
 void sailAdjust(uint16_t sail_val) {
-  if(sail_val > OFF_UPPER) {
+  if (sail_val > OFF_UPPER) {
     // check if sail is going above limits
-  
+    if(sail_pos >= MAX_SAIL_POS) {
+      // if at limit, turn off motor
+      digitalWrite(PWM1, LOW);
+      digitalWrite(PWM2, LOW);
+    }
+    else {
       digitalWrite(PWM1, LOW);
       uint8_t power = (uint8_t) ((float) (sail_val - OFF_UPPER)/(float) (MAX - OFF_UPPER) * MOTOR_MAX_SPEED);
       analogWrite(PWM2, power);
-    
+    }
   }
-  else if(sail_val < OFF_LOWER) {
+  else if (sail_val < OFF_LOWER){
     // check if sail is going below limits
-
+    if(sail_pos <= MIN_SAIL_POS) {
+      // if at limit, turn off motor
+      digitalWrite(PWM1, LOW);
       digitalWrite(PWM2, LOW);
-      uint8_t power = (uint8_t) (((float) (OFF_LOWER - sail_val)/(float) (OFF_LOWER - MIN) * MOTOR_MAX_SPEED));
+    }
+    else {
+      digitalWrite(PWM2, LOW);
+      uint8_t power = (uint8_t) ((float) (OFF_LOWER - sail_val)/(float) (OFF_LOWER - MIN) * MOTOR_MAX_SPEED);
       analogWrite(PWM1, power);
-    
+    }
   }
   else {
     // motor off
