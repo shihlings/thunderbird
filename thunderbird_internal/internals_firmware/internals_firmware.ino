@@ -7,24 +7,24 @@
  * Connections:     See internal_schematics located in the schematics folder
  */
 
-// For debug use only 
-  //#define DEBUG                           // Uncomment to see raw data
-  #define DEBUG_SERIAL          9600      // Debug Serial Baud rate
-
 #include <Servo.h>
 #include <Encoder.h>
 #include <SoftwareSerial.h>
+
+// For debug use only 
+  #define DEBUG                           // Uncomment to see raw data
+  #define DEBUG_SERIAL          115200    // Debug Serial Baud rate
 
 // Servo definitions
   Servo rudder;                           // create servo object to control the rudder
   uint8_t rudr_pos = 90;                  // variable to store the servo position
   #define MAX_SERVO_INTERVAL    10.0      // must be a float, defines how much the servo turns at max speed (must not exceed 180)
-  #define MAX_RUDR_POS          180       // the maximum angle the rudder servo can turn
-  #define MIN_RUDR_POS          0         // the minimum angle the rudder servo can turn
+  #define MAX_RUDR_POS          180.0     // the maximum angle the rudder servo can turn (must be a float)
+  #define MIN_RUDR_POS          0.0       // the minimum angle the rudder servo can turn (must be a float)
 
 // define RF 
   #define RF_SERIAL             115200    // RF Serial Baud rate
-  SoftwareSerial rfSerial(10, 11);        // RX, TX Pins
+  SoftwareSerial rfSerial(11, 10);        // RX, TX Pins
 
 // define Sail motor & encoder
   #define PWM1                  5
@@ -92,9 +92,9 @@ void readRF(uint16_t* rudr_val, uint16_t* sail_val) {
 
   // send to computer if debug is defined
   #ifdef DEBUG
-    Serial.print(rudr_val);
+    Serial.print(*rudr_val);
     Serial.print(";");
-    Serial.println(sail_val);
+    Serial.println(*sail_val);
   #endif
 }
 
@@ -117,29 +117,19 @@ void sendRF() {
 void sailAdjust(uint16_t sail_val) {
   if(sail_val > OFF_UPPER) {
     // check if sail is going above limits
-    if(sail_pos >= MAX_SAIL_POS) {
-      // if at limit, turn off motor
-      digitalWrite(PWM1, LOW);
-      digitalWrite(PWM2, LOW);
-    }
-    else {
+  
       digitalWrite(PWM1, LOW);
       uint8_t power = (uint8_t) ((float) (sail_val - OFF_UPPER)/(float) (MAX - OFF_UPPER) * MOTOR_MAX_SPEED);
       analogWrite(PWM2, power);
-    }
+    
   }
   else if(sail_val < OFF_LOWER) {
     // check if sail is going below limits
-    if(sail_pos <= MIN_SAIL_POS) {
-      // if at limit, turn off motor
-      digitalWrite(PWM1, LOW);
+
       digitalWrite(PWM2, LOW);
-    }
-    else {
-      digitalWrite(PWM2, LOW);
-      uint8_t power = (uint8_t) ((float) (OFF_LOWER - sail_val)/(float) (OFF_LOWER - MIN) * MOTOR_MAX_SPEED);
+      uint8_t power = (uint8_t) (((float) (OFF_LOWER - sail_val)/(float) (OFF_LOWER - MIN) * MOTOR_MAX_SPEED));
       analogWrite(PWM1, power);
-    }
+    
   }
   else {
     // motor off
@@ -150,28 +140,7 @@ void sailAdjust(uint16_t sail_val) {
 
 // Adjust Ruddr motor position
 void rudrAdjust(uint16_t rudr_val) {
-  if(rudr_val > OFF_UPPER) {
-    uint8_t delta = (uint8_t) ((float) (rudr_val - OFF_UPPER)/(float) (MAX - OFF_UPPER) * MAX_SERVO_INTERVAL);
-
-    // prevent angle going above 180 degrees
-    if(rudr_pos + delta < 180) {
-      rudr_pos += delta;
-    }
-    else {
-      rudr_pos = 180;
-    }
-  }
-  else if(rudr_val < OFF_LOWER) {
-    uint8_t delta = (uint8_t) ((float) (OFF_LOWER - rudr_val)/(float) (OFF_LOWER - MIN) * MAX_SERVO_INTERVAL);
-
-    // prevent overflowing for unsigned int
-    if(delta > rudr_pos) {
-      rudr_pos = 0;
-    }
-    else {
-      rudr_pos -= delta;
-    }
-  }
+  rudr_pos = (uint16_t) ((((float) rudr_val / (float) MAX) * (MAX_RUDR_POS - MIN_RUDR_POS)) + MIN_RUDR_POS);
   rudder.write(rudr_pos);
 }
 
