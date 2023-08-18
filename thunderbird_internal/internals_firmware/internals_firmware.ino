@@ -21,6 +21,7 @@
   #define MAX_SERVO_INTERVAL    10.0      // must be a float, defines how much the servo turns at max speed (must not exceed 180)
   #define MAX_RUDR_POS          180.0     // the maximum angle the rudder servo can turn (must be a float)
   #define MIN_RUDR_POS          0.0       // the minimum angle the rudder servo can turn (must be a float)
+  #define SLOW_DOWN_THRESHOLD   255.0     // must be a float, defines the encoder value difference (to the MAX or MIN position) at which the motor starts to slow down
 
 // define RF 
   #define RF_SERIAL             115200    // RF Serial Baud rate
@@ -33,7 +34,7 @@
   #define MAX_SAIL_POS          10000     // the maximum amount the sail motor can turn
   #define MIN_SAIL_POS          -10000    // the minimum amount the sail motor can turn
   int32_t sail_pos = 0;                   // variable to store sail encoder value
-  Encoder myEnc(2,3);
+  Encoder sailEncoder(2,3);
 
 //define thresholds
   #define OFF_UPPER             550       // defines the joystick value upper bound for the motors to stay off
@@ -122,9 +123,17 @@ void sailAdjust(uint16_t sail_val) {
       digitalWrite(PWM1, LOW);
       digitalWrite(PWM2, LOW);
     }
+    else if ((MAX_SAIL_POS - sail_pos) <= SLOW_DOWN_THRESHOLD) {
+      // reduce the speed by a "power reduction ratio" if the sail value is approaching the limit
+      digitalWrite(PWM1, LOW);
+      float reduction_ratio = (float) (MAX_SAIL_POS - sail_pos) / SLOW_DOWN_THRESHOLD;
+      float power = (float) (sail_val - OFF_UPPER) / (float) (MAX - OFF_UPPER) * MOTOR_MAX_SPEED;
+      uint8_t reduced_power = (uint8_t) (power * reduction_ratio);
+      analogWrite(PWM2, reduced_power);
+    }
     else {
       digitalWrite(PWM1, LOW);
-      uint8_t power = (uint8_t) ((float) (sail_val - OFF_UPPER)/(float) (MAX - OFF_UPPER) * MOTOR_MAX_SPEED);
+      uint8_t power = (uint8_t) ((float) (sail_val - OFF_UPPER) / (float) (MAX - OFF_UPPER) * MOTOR_MAX_SPEED);
       analogWrite(PWM2, power);
     }
   }
@@ -135,9 +144,17 @@ void sailAdjust(uint16_t sail_val) {
       digitalWrite(PWM1, LOW);
       digitalWrite(PWM2, LOW);
     }
+    else if ((sail_pos - MIN_SAIL_POS) <= SLOW_DOWN_THRESHOLD) {
+      // reduce the speed by a "power reduction ratio" if the sail value is approaching the limit
+      digitalWrite(PWM1, LOW);
+      float reduction_ratio = (float) (sail_pos - MIN_SAIL_POS) / SLOW_DOWN_THRESHOLD;
+      float power = (float) (OFF_LOWER - sail_val) / (float) (OFF_LOWER - MIN) * MOTOR_MAX_SPEED;
+      uint8_t reduced_power = (uint8_t) (power * reduction_ratio);
+      analogWrite(PWM2, reduced_power);
+    }
     else {
       digitalWrite(PWM2, LOW);
-      uint8_t power = (uint8_t) ((float) (OFF_LOWER - sail_val)/(float) (OFF_LOWER - MIN) * MOTOR_MAX_SPEED);
+      uint8_t power = (uint8_t) ((float) (OFF_LOWER - sail_val) / (float) (OFF_LOWER - MIN) * MOTOR_MAX_SPEED);
       analogWrite(PWM1, power);
     }
   }
@@ -150,13 +167,13 @@ void sailAdjust(uint16_t sail_val) {
 
 // Adjust Ruddr motor position
 void rudrAdjust(uint16_t rudr_val) {
-  rudr_pos = (uint16_t) ((((float) rudr_val / (float) MAX) * (MAX_RUDR_POS - MIN_RUDR_POS)) + MIN_RUDR_POS);
+  rudr_pos = (uint16_t) ((float) rudr_val / (float) MAX * (MAX_RUDR_POS - MIN_RUDR_POS) + MIN_RUDR_POS);
   rudder.write(rudr_pos);
 }
 
 // Read the current sail position from the sail encoder
 void sailEncoderRead() {
-  int32_t new_sail_pos = myEnc.read();
+  int32_t new_sail_pos = sailEncoder.read();
 
   // store and print on serial port if change is detected
   if(new_sail_pos != sail_pos) {
