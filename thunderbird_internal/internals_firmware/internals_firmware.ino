@@ -1,12 +1,13 @@
 /*
  * Date Created:    August 11th, 2023
- * Last Modified:   August 15th, 2023
+ * Last Modified:   August 19th, 2023
  * Filename:        internals_firmware.ino
  * Purpose:         Receive controller commands and turn the sail and rudder accordingly.
  * Microcontroller: Arduino Uno R3
  * Connections:     See internal_schematics located in the schematics folder
  */
 
+#define ENCODER_OPTIMIZE_INTERRUPTS       // optional setting causes Encoder to use more optimized code (must be defined before Encoder.h)
 #include <Servo.h>
 #include <Encoder.h>
 #include <SoftwareSerial.h>
