@@ -1,6 +1,6 @@
 /*
  * Date Created:    August 5th, 2023
- * Last Modified:   August 19th, 2023
+ * Last Modified:   August 21th, 2023
  * Filename:        controller_firmware.ino
  * Purpose:         Process input data from two joystics and send them using an RF communication module to Thunderbird.
  * Microcontroller: Arduino Uno R3
@@ -43,6 +43,12 @@ void setup() {
 
   // Begin serial communication to RF Module
   rfSerial.begin(RF_SERIAL_RATE);
+
+  // fill the rudr_val and sail_val variables with default values
+  for(int index = 0; index < MEAN_NUM; ++index) {
+    rudr_val[index] = 500;
+    sail_val[index] = 500;
+  }
 }
 
 void loop() {
@@ -113,10 +119,17 @@ void getPosition(uint8_t* rudr_pos, int32_t* sail_pos) {
 }
 
 // send serial message to RF module to instruct what to send
-void sendSeralRF(uint16_t mean_rudr_val, uint16_t mean_sail_val) {
+void sendSeralRF(uint16_t mean_rudr_val, uint16_t mean_sail_val) {\
+  rfSerial.print(":");                                  // error checking symbol
   rfSerial.print(mean_rudr_val);
-  rfSerial.print(";");
-  rfSerial.println(mean_sail_val);
+  rfSerial.print(";");                                  // error checking symbol
+  if (mean_rudr_val == 0 && mean_sail_val == 0) {
+    rfSerial.print(mean_sail_val);
+    rfSerial.print("?");                                // error checking symbol
+  }
+  else {
+    rfSerial.println(mean_sail_val);
+  }
 }
 
 // send serial debug message containing raw values from each analog port
