@@ -5,18 +5,18 @@
  * Purpose:         Process input data from two joystics and send them using an RF communication module to Thunderbird.
  * Microcontroller: Arduino Uno R3
  * Connections:     See controller_schematics located in the schematics folder
- * Notes:           Disconnect the RF module if there are issues uploading the sketch.
+ * Notes:           This is the final production firmware.
  */
 
 #include <SoftwareSerial.h>
 
 // For debugging use only
-  #define DEBUG                           // uncomment this line when trying to debug the code with a computer
+  //#define DEBUG                           // uncomment this line when trying to debug the code with a computer
   #define DEBUG_SERIAL_RATE  115200       // Debug Serial Baud rate
 
 // Potentiometer and Joystick pin definitions
   #define RUDR               A1
-  #define SAIL               A4
+  #define SAIL               A2
 
 // RF definition
   #define RF_SERIAL_RATE     115200       // change this to the baud rate that the RF communication module is set at
@@ -44,13 +44,14 @@ void setup() {
   // Begin serial communication to RF Module
   rfSerial.begin(RF_SERIAL_RATE);
 
-  // fill the rudr_val and sail_val variables with default values
+  // fill the rudr_val and sail_val variables with default values (500 is the magic number, because the joystick nominal value sits at around 490 - 510).
   for(int index = 0; index < MEAN_NUM; ++index) {
     rudr_val[index] = 500;
     sail_val[index] = 500;
   }
 }
 
+// main loop
 void loop() {
   // initialize mean joystick value variables
   uint16_t mean_rudr_val = 0;
@@ -119,16 +120,16 @@ void getPosition(uint8_t* rudr_pos, int32_t* sail_pos) {
 }
 
 // send serial message to RF module to instruct what to send
-void sendSeralRF(uint16_t mean_rudr_val, uint16_t mean_sail_val) {\
-  rfSerial.print(":");                                  // error checking symbol
+void sendSeralRF(uint16_t mean_rudr_val, uint16_t mean_sail_val) {
   rfSerial.print(mean_rudr_val);
-  rfSerial.print(";");                                  // error checking symbol
+  rfSerial.print(";");                                    // error checking symbol for signal integrity
+  rfSerial.print(mean_sail_val);
   if (mean_rudr_val == 0 && mean_sail_val == 0) {
-    rfSerial.print(mean_sail_val);
-    rfSerial.print("?");                                // error checking symbol
+    rfSerial.println("?");                                // error checking symbol for signal integrity
   }
   else {
-    rfSerial.println(mean_sail_val);
+    rfSerial.print(":");
+    rfSerial.println(mean_sail_val + mean_rudr_val);      // error checking value for signal integrity
   }
 }
 
