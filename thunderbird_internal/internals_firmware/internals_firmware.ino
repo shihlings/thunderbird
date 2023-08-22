@@ -1,10 +1,11 @@
 /*
  * Date Created:    August 11th, 2023
- * Last Modified:   August 19th, 2023
+ * Last Modified:   August 21th, 2023
  * Filename:        internals_firmware.ino
  * Purpose:         Receive controller commands and turn the sail and rudder accordingly.
  * Microcontroller: Arduino Uno R3
  * Connections:     See internal_schematics located in the schematics folder
+ * Notes:           This is the final production firmware.
  */
 
 #define ENCODER_OPTIMIZE_INTERRUPTS       // optional setting causes Encoder to use more optimized code (must be defined before Encoder.h)
@@ -13,7 +14,7 @@
 #include <SoftwareSerial.h>
 
 // For debug use only 
-  #define DEBUG                           // Uncomment to see raw data
+  //#define DEBUG                           // Uncomment to see raw data
   #define DEBUG_SERIAL          115200    // Debug Serial Baud rate
 
 // Servo definitions
@@ -67,37 +68,67 @@ void loop() {
   uint16_t rudr_val = 0;
   uint16_t sail_val = 0;
 
-  // update sail position & send it through RF and print on Serial port if DEBUG is on
+  // initialize a checksum and error value
+  uint16_t rf_sum = 0;
+  bool error = false;
+
+  // update sail position
   sailEncoderRead();
+
+  // Get RF data from the controller
+  readRF(&rudr_val, &sail_val, &rf_sum, &error);
+
+  // if error check passed, continue to adjust motor speed/direction/position
+  if(!error) {
+    // Adjust the two motor's speed, direction, and position
+    sailAdjust(sail_val);
+    rudrAdjust(rudr_val);
+  }
+  else {
+    // stop sail motor immediately and keep rudder position when error check fails
+    digitalWrite(PWM1, LOW);
+    digitalWrite(PWM2, LOW);
+  }
+
+  // send sail position and rudder position through RF
   sendRF();
 
-  // Get RF values and print on Serial port if DEBUG is on
-  readRF(&rudr_val, &sail_val);
-
-  // Adjust the two motor's speed, direction, and position
-  sailAdjust(sail_val);
-  rudrAdjust(rudr_val);
+  // if debugging mode is on, send debugging messages through serial port
+  #ifdef DEBUG
+    sendDebug(rudr_val, sail_val, rf_sum, error);
+  #endif
 }
 
 // read RF serial
-void readRF(uint16_t* rudr_val, uint16_t* sail_val) {
-  // store the first integer in rudder value
+void readRF(uint16_t* rudr_val, uint16_t* sail_val, uint16_t* rf_sum, bool* error) {
+  // read in the rudr value first (regardless of signal integrity)
   *rudr_val = rfSerial.parseInt();
 
   // if the separation semicolon is detected (for validation), store the second integer as sail value
   if(rfSerial.read() == ';') {
     *sail_val = rfSerial.parseInt();
   }
+  else {
+    // if signal integrity could not be validated through the semicolon, report it via the error boolean
+    *error = true;
+  }
+
+  // if both values are zero, check for the following ?, if not present, report it via error boolean (signal integrity problem)
+  if(*rudr_val == 0 && *sail_val == 0 && rfSerial.read() != '?') {
+    *error = true;
+  }
+  else  {
+    // if one of the values isn't zero, read in the sum of the two values (only sent when both values are non-zero)
+    *rf_sum = rfSerial.parseInt();
+    
+    // if the summation does not match, report signal integrity problem via error boolean
+    if(*rudr_val + *sail_val != *rf_sum) {
+      *error = true;
+    }
+  }
 
   // flush remaining data in serial buffer to prevent errors
   rfSerial.flush();
-
-  // send to computer if debug is defined
-  #ifdef DEBUG
-    Serial.print(*rudr_val);
-    Serial.print(";");
-    Serial.println(*sail_val);
-  #endif
 }
 
 // send sail and rudr position through serial
@@ -105,14 +136,23 @@ void sendRF() {
   rfSerial.print(rudr_pos);
   rfSerial.print(";");
   rfSerial.println(sail_pos);
+}
 
-  // send to computer if debug is defined
-  #ifdef DEBUG
-    Serial.print(rudr_pos);
-    Serial.print(";");
-    Serial.print(sail_pos);
-    Serial.print(";");
-  #endif
+// send all statistics through serial port
+void sendDebug(uint16_t rudr_val, uint16_t sail_val, uint16_t rf_sum, bool error) {
+  Serial.print(rudr_pos);
+  Serial.print(";");
+  Serial.print(sail_pos);
+  Serial.print(";");
+  Serial.print(rudr_val);
+  Serial.print(";");
+  Serial.print(sail_val);
+  Serial.print(";");
+  Serial.print(rf_sum);
+  Serial.print(";");
+  Serial.print(sail_val+rudr_val);
+  Serial.print(";");
+  Serial.println(error);
 }
 
  // Adjust Sail motor speed and direction
