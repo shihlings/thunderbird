@@ -22,19 +22,20 @@
   uint8_t rudr_pos = 90;                  // variable to store the servo position
   #define MAX_SERVO_INTERVAL    10.0      // must be a float, defines how much the servo turns at max speed (must not exceed 180)
   #define MAX_RUDR_POS          180.0     // the maximum angle the rudder servo can turn (must be a float)
-  #define MIN_RUDR_POS          0.0       // the minimum angle the rudder servo can turn (must be a float)
-  #define SLOW_DOWN_THRESHOLD   255.0     // must be a float, defines the encoder value difference (to the MAX or MIN position) at which the motor starts to slow down
+  #define MIN_RUDR_POS          67.0       // the minimum angle the rudder servo can turn (must be a float)
+  #define SLOW_DOWN_THRESHOLD   12500.0    // must be a float, defines the encoder value difference (to the MAX or MIN position) at which the motor starts to slow down
 
 // define RF 
   #define RF_SERIAL             115200    // RF Serial Baud rate
-  SoftwareSerial rfSerial(11, 10);        // RX, TX Pins
+  #define SENDING_INTERVAL      200
+  SoftwareSerial rfSerial(10, 11);        // RX, TX Pins
 
 // define Sail motor & encoder
   #define PWM1                  5
   #define PWM2                  6
   #define MOTOR_MAX_SPEED       255.0     // must be a float, defines how fast the dc motor turns at max speed (limit is 255)
-  #define MAX_SAIL_POS          10000     // the maximum amount the sail motor can turn
-  #define MIN_SAIL_POS          -10000    // the minimum amount the sail motor can turn
+  #define MAX_SAIL_POS          100000     // the maximum amount the sail motor can turn
+  #define MIN_SAIL_POS          -100000    // the minimum amount the sail motor can turn
   int32_t sail_pos = 0;                   // variable to store sail encoder value
   Encoder sailEncoder(2,3);
 
@@ -43,6 +44,16 @@
   #define OFF_LOWER             450       // defines the joystick value lower bound for the motors to stay off
   #define MAX                   1023      // defines the max joystick value
   #define MIN                   0         // defines the min joystick value
+
+// Variables 
+  #define  MEAN_NUM             10        // Defines the number of past values to average
+  uint32_t last_send_time;                // Store last RF send time
+  uint16_t rudr_val[MEAN_NUM];            // Store an array of past rudder values
+  uint16_t sail_val[MEAN_NUM];            // Store an array of past sail values
+  uint16_t old_rudr_val = 500;
+  uint16_t old_sail_val = 500;
+  uint8_t  val_index = 0;                 // Current position of the index for the two arrays
+  uint16_t error_count = 0;
 
 // setup
 void setup() {
@@ -60,13 +71,21 @@ void setup() {
 
   // begin receiving RF data via Serial 
   rfSerial.begin(RF_SERIAL);
+
+  // fill the rudr_val and sail_val variables with default values (500 is the magic number, because the joystick nominal value sits at around 490 - 510).
+  for(int index = 0; index < MEAN_NUM; ++index) {
+    rudr_val[index] = 500;
+    sail_val[index] = 500;
+  }
 }
 
 // main loop
 void loop() {
-  // initialize rudr and sail values
-  uint16_t rudr_val = 0;
-  uint16_t sail_val = 0;
+  // initialize temporary storage for rudr and sail values
+  uint16_t rudr_val_temp = 500;
+  uint16_t sail_val_temp = 500;
+  uint16_t mean_rudr_val = 500;
+  uint16_t mean_sail_val = 500;
 
   // initialize a checksum and error value
   uint16_t rf_sum = 0;
@@ -76,37 +95,52 @@ void loop() {
   sailEncoderRead();
 
   // Get RF data from the controller
-  readRF(&rudr_val, &sail_val, &rf_sum, &error);
+  readRF(&rudr_val_temp, &sail_val_temp, &rf_sum, &error);
 
   // if error check passed, continue to adjust motor speed/direction/position
   if(!error) {
-    // Adjust the two motor's speed, direction, and position
-    sailAdjust(sail_val);
-    rudrAdjust(rudr_val);
+    old_rudr_val = rudr_val_temp;
+    old_sail_val = sail_val_temp;
+    error_count = 0;
   }
   else {
-    // stop sail motor immediately and keep rudder position when error check fails
-    digitalWrite(PWM1, LOW);
-    digitalWrite(PWM2, LOW);
+    if(error_count++ > 3) {
+      rudr_val_temp = old_rudr_val;
+      sail_val_temp = 500;
+      old_sail_val = 500;
+    }
+    else {
+      rudr_val_temp = old_rudr_val;
+      sail_val_temp = old_sail_val;
+    }
   }
 
-  // send sail position and rudder position through RF
-  sendRF();
+  valAveraging(rudr_val_temp, sail_val_temp, &mean_rudr_val, &mean_sail_val);
+
+  // Adjust the two motor's speed, direction, and position
+  sailAdjust(mean_sail_val);
+  rudrAdjust(mean_rudr_val);
+
+  if(millis() >= last_send_time + SENDING_INTERVAL){
+    // Send message via RF when sending interval has expired
+    sendRF();
+    last_send_time = millis();
+  }
 
   // if debugging mode is on, send debugging messages through serial port
   #ifdef DEBUG
-    sendDebug(rudr_val, sail_val, rf_sum, error);
+    sendDebug(rudr_val_temp, sail_val_temp, rf_sum, error);
   #endif
 }
 
 // read RF serial
-void readRF(uint16_t* rudr_val, uint16_t* sail_val, uint16_t* rf_sum, bool* error) {
+void readRF(uint16_t* rudr_val_temp, uint16_t* sail_val_temp, uint16_t* rf_sum, bool* error) {
   // read in the rudr value first (regardless of signal integrity)
-  *rudr_val = rfSerial.parseInt();
+  *rudr_val_temp = rfSerial.parseInt();
 
   // if the separation semicolon is detected (for validation), store the second integer as sail value
   if(rfSerial.read() == ';') {
-    *sail_val = rfSerial.parseInt();
+    *sail_val_temp = rfSerial.parseInt();
   }
   else {
     // if signal integrity could not be validated through the semicolon, report it via the error boolean
@@ -114,7 +148,7 @@ void readRF(uint16_t* rudr_val, uint16_t* sail_val, uint16_t* rf_sum, bool* erro
   }
 
   // if both values are zero, check for the following ?, if not present, report it via error boolean (signal integrity problem)
-  if(*rudr_val == 0 && *sail_val == 0 && rfSerial.read() != '?') {
+  if(*rudr_val_temp == 0 && *sail_val_temp == 0 && rfSerial.read() != '?') {
     *error = true;
   }
   else  {
@@ -122,7 +156,7 @@ void readRF(uint16_t* rudr_val, uint16_t* sail_val, uint16_t* rf_sum, bool* erro
     *rf_sum = rfSerial.parseInt();
     
     // if the summation does not match, report signal integrity problem via error boolean
-    if(*rudr_val + *sail_val != *rf_sum) {
+    if(*rudr_val_temp + *sail_val_temp != *rf_sum) {
       *error = true;
     }
   }
@@ -187,11 +221,11 @@ void sailAdjust(uint16_t sail_val) {
     }
     else if ((sail_pos - MIN_SAIL_POS) <= SLOW_DOWN_THRESHOLD) {
       // reduce the speed by a "power reduction ratio" if the sail value is approaching the limit
-      digitalWrite(PWM1, LOW);
+      digitalWrite(PWM2, LOW);
       float reduction_ratio = (float) (sail_pos - MIN_SAIL_POS) / SLOW_DOWN_THRESHOLD;
       float power = (float) (OFF_LOWER - sail_val) / (float) (OFF_LOWER - MIN) * MOTOR_MAX_SPEED;
       uint8_t reduced_power = (uint8_t) (power * reduction_ratio);
-      analogWrite(PWM2, reduced_power);
+      analogWrite(PWM1, reduced_power);
     }
     else {
       digitalWrite(PWM2, LOW);
@@ -221,4 +255,29 @@ void sailEncoderRead() {
     sail_pos = new_sail_pos;
     Serial.println(new_sail_pos);
   }
+}
+
+void valAveraging(uint16_t rudr_val_temp, uint16_t sail_val_temp, uint16_t* mean_rudr_val, uint16_t* mean_sail_val) {
+  // if index is overflowing, reset to 0
+  if(++val_index == MEAN_NUM) {
+    val_index = 0;
+  }
+
+  // add new values to the array
+  rudr_val[val_index] = rudr_val_temp;
+  sail_val[val_index] = sail_val_temp;
+
+  // initialize variable to calculate sum of the array
+  uint32_t rudr_total = 0;
+  uint32_t sail_total = 0;
+
+  // calculate sum for both arrays
+  for(uint8_t index = 0; index < MEAN_NUM; ++index) {
+    rudr_total += rudr_val[index];
+    sail_total += sail_val[index];
+  }
+
+  // Calculate the mean (average) for both arrays
+  *mean_rudr_val = rudr_total / MEAN_NUM;
+  *mean_sail_val = sail_total / MEAN_NUM;
 }

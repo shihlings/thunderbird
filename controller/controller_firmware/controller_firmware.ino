@@ -1,6 +1,6 @@
 /*
  * Date Created:    August 5th, 2023
- * Last Modified:   August 21th, 2023
+ * Last Modified:   September 9th, 2023
  * Filename:        controller_firmware.ino
  * Purpose:         Process input data from two joystics and send them using an RF communication module to Thunderbird.
  * Microcontroller: Arduino Uno R3
@@ -11,7 +11,7 @@
 #include <SoftwareSerial.h>
 
 // For debugging use only
-  //#define DEBUG                           // uncomment this line when trying to debug the code with a computer
+  #define DEBUG                           // uncomment this line when trying to debug the code with a computer
   #define DEBUG_SERIAL_RATE  115200       // Debug Serial Baud rate
 
 // Potentiometer and Joystick pin definitions
@@ -20,12 +20,12 @@
 
 // RF definition
   #define RF_SERIAL_RATE     115200       // change this to the baud rate that the RF communication module is set at
-  #define SENDING_INTERVAL   150
+  #define SENDING_INTERVAL   200
   SoftwareSerial rfSerial(11, 10);        // RX, TX Pins
 
 // Variables 
-  #define  MEAN_NUM             5         // Defines the number of past values to average
-  uint32_t last_send_time;                // Store last RF send time
+  #define  MEAN_NUM             1         // Defines the number of past values to average
+  uint32_t last_send_time = 0;            // Store last RF send time
   uint16_t rudr_val[MEAN_NUM];            // Store an array of past rudder values
   uint16_t sail_val[MEAN_NUM];            // Store an array of past sail values
   uint8_t  val_index = 0;                 // Current position of the index for the two arrays
@@ -121,6 +121,12 @@ void getPosition(uint8_t* rudr_pos, int32_t* sail_pos) {
 
 // send serial message to RF module to instruct what to send
 void sendSeralRF(uint16_t mean_rudr_val, uint16_t mean_sail_val) {
+  if(mean_rudr_val == 0) {
+    mean_rudr_val = 1;
+  }
+  if(mean_sail_val == 0) {
+    mean_sail_val = 1;
+  }
   rfSerial.print(mean_rudr_val);
   rfSerial.print(";");                                    // error checking symbol for signal integrity
   rfSerial.print(mean_sail_val);
